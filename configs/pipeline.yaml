@@ -1,0 +1,14 @@
+project_name: "NeuroSymbolic-HTR"
+version: "1.0.0"
+
+pipeline_flow:
+  - ingestion
+  - tiling
+  - detection
+  - recognition
+  - reasoning
+  - validation
+
+device: "cuda" 
+precision: "fp16" 
+quantization: "int8"

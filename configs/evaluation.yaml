@@ -1,0 +1,17 @@
+metrics:
+  - cer
+  - wer
+  - bleu_4
+  - meteor
+
+benchmarks:
+  datasets: ["IAM", "CVL"]
+  baselines:
+    - tesseract_v5
+    - paddle_ocr
+    - trocr_vanilla
+
+visualization:
+  save_plots: true
+  draw_boxes: true
+  lattice_graph_export: true

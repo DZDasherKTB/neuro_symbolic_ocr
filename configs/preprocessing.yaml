@@ -1,0 +1,25 @@
+profiler:
+  model: "moondream2"
+  task: "document_classification"
+
+normalization:
+  target_stroke_width: 10
+  deskew: true
+  grayscale: true
+
+thresholding:
+  method: "sauvola"
+  window_size: 25
+  k_factor: 0.2
+  r_value: 128
+
+augmentations:
+  # Using Albumentations for training-time robustness
+  shading:
+    apply: true
+    intensity: 0.3
+  clahe:
+    clip_limit: 4.0
+    tile_grid_size: [8, 8]
+  blur:
+    median_kernel: 3

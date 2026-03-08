@@ -1,0 +1,9 @@
+tiling_engine:
+  mode: "adaptive_multi_scale"
+  scales:
+    - resolution: [224, 224]
+      stride: 180
+    - resolution: [384, 384]
+      stride: 300
+  overlap_ratio: 0.2
+  attention_guided: true 

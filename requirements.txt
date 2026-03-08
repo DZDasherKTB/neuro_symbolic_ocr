@@ -1,0 +1,23 @@
+# PyTorch (install CUDA build separately)
+torch
+torchvision
+torchaudio
+
+# Core ML
+numpy
+scipy
+scikit-learn
+
+# Vision
+opencv-python
+pillow
+albumentations
+timm
+
+# Config / utils
+pyyaml
+tqdm
+
+# Visualization
+matplotlib
+seaborn
