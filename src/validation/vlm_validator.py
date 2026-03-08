@@ -2,9 +2,9 @@ import torch
 import cv2
 from PIL import Image
 from typing import List, Dict, Any
-from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, AutoModelForVision2Seq
 from src.pipeline.config_loader import ConfigLoader
-
+import numpy as np
 class VLMValidator:
     def __init__(self):
         config = ConfigLoader()
@@ -12,13 +12,14 @@ class VLMValidator:
         self.device = config.pipeline.device
         
         print(f"Loading Hallucination Guard: {self.cfg.model_name}")
-        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-            self.cfg.model_name, 
-            torch_dtype=torch.bfloat16, 
-            device_map=self.device
-        )
         self.processor = AutoProcessor.from_pretrained(self.cfg.model_name)
-        self.threshold = self.cfg.cross_modal_threshold # e.g., 0.75
+
+        self.model = AutoModelForVision2Seq.from_pretrained(
+            self.cfg.model_name,
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            device_map="auto"
+        )
+        self.threshold = self.cfg.cross_modal_threshold 
 
     def validate(self, proposed_text: str, visual_evidence: List[Dict], lattice: List[Dict]) -> str:
         """
@@ -45,7 +46,7 @@ class VLMValidator:
 
     def _verify_with_vlm(self, crop: np.ndarray, word: str) -> bool:
         """
-        Asks Qwen2-VL: 'Does this image snippet actually contain the word X?'
+        Asks VLM: 'Does this image snippet actually contain the word X?'
         """
         pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
         

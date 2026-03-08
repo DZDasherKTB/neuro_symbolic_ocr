@@ -86,8 +86,7 @@ def run_pipeline(image_path: str):
 
 if __name__ == "__main__":
 
-    image_path = input("Enter path to test image: ")
 
-    text = run_pipeline(image_path)
+    text = run_pipeline("data/raw/image.png")
 
     print("\nPipeline completed.")

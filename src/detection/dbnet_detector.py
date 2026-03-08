@@ -17,11 +17,6 @@ class DBNetDetector:
         self.ocr_detector = PaddleOCR(
             use_angle_cls=False,
             lang="en",
-            det=True,
-            rec=False,
-            use_gpu=(self.device == "cuda"),
-            det_db_thresh=0.3, 
-            det_db_box_thresh=self.box_thresh 
         )
 
     def detect(self, tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -32,15 +27,20 @@ class DBNetDetector:
             tile_id = tile["tile_id"]
             x_offset, y_offset, _, _ = tile["global_coords"]
 
-            results = self.ocr_detector.ocr(tile_img, det=True, rec=False, cls=False)
+            if len(tile_img.shape) == 2:
+                tile_img = cv2.cvtColor(tile_img, cv2.COLOR_GRAY2BGR)
+
+            results = self.ocr_detector.predict(tile_img)
 
             if not results or results[0] is None:
                 continue
 
-            for line in results:
-                for det in line:
-                    poly_pts = np.array(det[0]).astype(int)
-                    confidence = float(det[1])
+            for res in results:
+                boxes = res.get("dt_polys", [])
+                scores = res.get("dt_scores", [])
+
+                for poly_pts, confidence in zip(boxes, scores):
+                    poly_pts = np.array(poly_pts).astype(int)
 
                     x1, y1 = poly_pts[:, 0].min(), poly_pts[:, 1].min()
                     x2, y2 = poly_pts[:, 0].max(), poly_pts[:, 1].max()
@@ -50,8 +50,8 @@ class DBNetDetector:
                     global_detections.append({
                         "parent_tile_id": tile_id,
                         "bbox": global_box,
-                        "confidence": confidence,
-                        "style_tag": None  #needs refinement (later)
+                        "confidence": float(confidence),
+                        "style_tag": None
                     })
 
         return self._apply_nms(global_detections)

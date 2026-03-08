@@ -10,7 +10,7 @@ torchvision
 torchaudio
 
 # Transformers / LLM / VLM
-transformers
+transformers==4.48.2
 accelerate
 sentencepiece
 safetensors
@@ -26,3 +26,5 @@ deskew
 # Utilities
 tqdm
 matplotlib
+
+bitsandbytes

@@ -9,7 +9,7 @@ detection:
 
 recognition:
   engine: "trocr_engine"
-  model_path: "microsoft/trocr-large-handwritten"
+  model_path: "microsoft/trocr-base-handwritten"
   max_length: 32
   beam_size: 5
   lattice:
@@ -18,7 +18,7 @@ recognition:
 
 reasoning:
   engine: "llm_reconstruction"
-  model_name: "meta-llama/Meta-Llama-3-8B-Instruct"
+  model_name: "microsoft/Phi-3-mini-4k-instruct"
   temperature: 0.2
   top_p: 0.9
   # Balancing Visual (OCR) vs. Linguistic (LLM) weights
@@ -28,6 +28,9 @@ reasoning:
 
 validation:
   engine: "vlm_validator"
-  model_name: "Qwen/Qwen2-VL-7B-Instruct"
+  model_name: "HuggingFaceTB/SmolVLM-Instruct"
   hallucination_guard: true
   cross_modal_threshold: 0.75 
+
+vlm:
+  model_name: HuggingFaceTB/SmolVLM-Instruct

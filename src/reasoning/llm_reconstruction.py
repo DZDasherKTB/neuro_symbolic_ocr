@@ -3,6 +3,7 @@ import json
 from typing import List, Dict, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from src.pipeline.config_loader import ConfigLoader
+from transformers import BitsAndBytesConfig
 
 class LLMReconstructor:
     def __init__(self):
@@ -12,11 +13,17 @@ class LLMReconstructor:
         
         print(f"Loading Reasoning Engine: {self.cfg.model_name}")
         self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.model_name)
+
+        bnb = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+
         self.model = AutoModelForCausalLM.from_pretrained(
             self.cfg.model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
-            # load_in_8bit=True # Optional
+            quantization_config=bnb,
+            device_map="auto"
         )
         self.model.eval()
         self.lambda_visual = self.cfg.optimization.lambda_visual # 0.65
