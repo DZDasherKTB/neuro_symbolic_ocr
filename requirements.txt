@@ -1,23 +1,28 @@
-# PyTorch (install CUDA build separately)
+# Core
+numpy
+opencv-python
+Pillow
+pyyaml
+
+# Torch
 torch
 torchvision
 torchaudio
 
-# Core ML
-numpy
-scipy
-scikit-learn
+# Transformers / LLM / VLM
+transformers
+accelerate
+sentencepiece
+safetensors
 
-# Vision
-opencv-python
-pillow
-albumentations
-timm
+# OCR + Detection
+paddleocr
+paddlepaddle
 
-# Config / utils
-pyyaml
+# Image processing
+scikit-image
+deskew
+
+# Utilities
 tqdm
-
-# Visualization
 matplotlib
-seaborn
