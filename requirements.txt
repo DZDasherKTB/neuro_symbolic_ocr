@@ -17,7 +17,9 @@ safetensors
 
 # OCR + Detection
 paddleocr
-paddlepaddle
+paddlepaddle==3.3.0
+paddlex
+craft-text-detector
 
 # Image processing
 scikit-image

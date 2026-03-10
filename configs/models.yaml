@@ -1,11 +1,11 @@
 detection:
-  engine: "dbnet_detector"
-  backbone: "resnet50"
-  box_thresh: 0.6
+  engine: "yolov8_detector"
+  backbone: "yolov8n"
+  box_thresh: 0.05
   unclip_ratio: 1.5
   vlm_refiner:
     enabled: true
-    trigger_threshold: 0.4 
+    trigger_threshold: 0.4
 
 recognition:
   engine: "trocr_engine"
@@ -18,7 +18,7 @@ recognition:
 
 reasoning:
   engine: "llm_reconstruction"
-  model_name: "microsoft/Phi-3-mini-4k-instruct"
+  model_name: "Qwen/Qwen2.5-1.5B-Instruct"
   temperature: 0.2
   top_p: 0.9
   # Balancing Visual (OCR) vs. Linguistic (LLM) weights

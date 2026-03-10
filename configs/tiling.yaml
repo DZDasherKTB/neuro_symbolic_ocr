@@ -1,9 +1,9 @@
 tiling_engine:
   mode: "adaptive_multi_scale"
   scales:
-    - resolution: [224, 224]
-      stride: 180
-    - resolution: [384, 384]
-      stride: 300
-  overlap_ratio: 0.2
-  attention_guided: true 
+    - resolution: [1024,1024]
+      stride: 896
+    - resolution: [1280,1280]
+      stride: 1024
+  overlap_ratio: 0.1
+  attention_guided: false

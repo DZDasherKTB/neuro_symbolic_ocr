@@ -15,7 +15,7 @@ class LLMReconstructor:
         self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.model_name)
 
         bnb = BitsAndBytesConfig(
-            load_in_4bit=True,
+            load_in_4bit=False,
             bnb_4bit_compute_dtype=torch.float16,
             bnb_4bit_use_double_quant=True,
         )
@@ -34,41 +34,59 @@ class LLMReconstructor:
         """
         prompt = self._build_prompt(lattice, context)
         
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
-        
+        inputs = self.tokenizer(prompt, return_tensors="pt").to("cuda")
         with torch.no_grad():
             output_tokens = self.model.generate(
-                **inputs,
-                max_new_tokens=512,
-                temperature=self.cfg.temperature,
-                top_p=self.cfg.top_p,
-                do_sample=True
-            )
+    **inputs,
+    max_new_tokens=120,
+    do_sample=False,
+    temperature=None,
+    top_p=None,
+    top_k=None
+)
         
         response = self.tokenizer.decode(output_tokens[0], skip_special_tokens=True)
         return self._extract_final_text(response, prompt)
 
-    def _build_prompt(self, lattice: List[Dict], context: str) -> str:
-        """
-        Creates a structured prompt containing the token lattice.
-        """
-        lattice_str = json.dumps(lattice, indent=2)
-        
-        system_msg = (
-            "You are a handwriting expert. You will receive a 'Token Lattice' representing "
-            "OCR candidates for a handwritten document. Each word has multiple candidates "
-            "with visual probabilities. Your task is to reconstruct the most likely original "
-            "text based on grammar, context, and the provided probabilities.\n\n"
-            f"Context of document: {context}\n"
-            "Output ONLY the final reconstructed text."
-        )
-        
-        user_msg = f"Lattice Data:\n{lattice_str}\n\nReconstructed Text:"
-        
-        # Using Llama-3 Chat Template format
-        return f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_msg}<|eot_id|>" \
-               f"<|start_header_id|>user<|end_header_id|>\n\n{user_msg}<|eot_id|>" \
-               f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+    def _build_prompt(self, lattice, context):
+
+        lines = []
+
+        for line in lattice:
+
+            words = []
+
+            for candidates in line["words"]:
+
+                words.append(" / ".join(candidates))
+
+            lines.append(" ".join(words))
+
+        lattice_text = "\n".join(lines)
+
+        prompt = f"""
+    You are reconstructing handwritten OCR text.
+
+    Each word may have multiple candidates separated by "/".
+
+    Choose the most probable word from each group.
+
+    Rules:
+    - Do NOT invent words
+    - Only choose from the candidates
+    - Output ONLY the final reconstructed text
+
+    OCR candidates:
+    {lattice_text}
+
+    Reconstructed text:
+    """
+
+        print("\n===== LLM PROMPT START =====\n")
+        print(prompt)
+        print("\n===== LLM PROMPT END =====\n")
+
+        return prompt
 
     def _extract_final_text(self, response: str, prompt: str) -> str:
         """Removes the prompt part of the response."""
