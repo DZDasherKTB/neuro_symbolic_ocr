@@ -35,17 +35,34 @@ class LLMReconstructor:
     def reconstruct(self, recognized_lines: List[Dict]) -> str:
         """
         Corrects OCR output and reconstructs readable text.
+        Supports multiple text blocks.
         """
 
         if not recognized_lines:
             return ""
 
+        # sort by block then line
         recognized_lines = sorted(
             recognized_lines,
-            key=lambda x: x["line_id"]
+            key=lambda x: (x.get("block_id", 0), x["line_id"])
         )
 
-        raw_text = "\n".join([l["text"] for l in recognized_lines])
+        blocks = {}
+
+        for line in recognized_lines:
+            block_id = line.get("block_id", 0)
+
+            if block_id not in blocks:
+                blocks[block_id] = []
+
+            blocks[block_id].append(line["text"])
+
+        raw_blocks = []
+
+        for block_id in sorted(blocks.keys()):
+            raw_blocks.append("\n".join(blocks[block_id]))
+
+        raw_text = "\n\n".join(raw_blocks)
 
         prompt = self._build_prompt(raw_text)
 

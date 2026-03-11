@@ -110,23 +110,57 @@ class DBNetDetector:
 
         return [detections[i] for i in indices.flatten()]
 
-    def detect_text_region(self, detections):
+    def detect_text_regions(self, detections):
 
         if not detections:
-            return None
+            return []
 
-        x1 = min(d["bbox"][0] for d in detections)
-        y1 = min(d["bbox"][1] for d in detections)
-        x2 = max(d["bbox"][2] for d in detections)
-        y2 = max(d["bbox"][3] for d in detections)
-        pad = 20
+        # sort boxes top → bottom
+        detections = sorted(detections, key=lambda d: d["bbox"][1])
 
-        x1 = max(0, x1-pad)
-        y1 = max(0, y1-pad)
-        x2 = x2+pad
-        y2 = y2+pad
-        
-        return [x1, y1, x2, y2]
+        regions = []
+        current = [detections[0]]
+
+        for i in range(1, len(detections)):
+
+            prev = current[-1]
+            curr = detections[i]
+
+            prev_bottom = prev["bbox"][3]
+            curr_top = curr["bbox"][1]
+
+            height = prev["bbox"][3] - prev["bbox"][1]
+
+            # if vertical gap small → same block
+            if curr_top - prev_bottom < height * 2.5:
+                current.append(curr)
+
+            else:
+                regions.append(current)
+                current = [curr]
+
+        regions.append(current)
+
+        # convert groups → bounding boxes
+        blocks = []
+
+        for group in regions:
+
+            x1 = min(d["bbox"][0] for d in group)
+            y1 = min(d["bbox"][1] for d in group)
+            x2 = max(d["bbox"][2] for d in group)
+            y2 = max(d["bbox"][3] for d in group)
+
+            pad = 20
+
+            blocks.append([
+                max(0, x1 - pad),
+                max(0, y1 - pad),
+                x2 + pad,
+                y2 + pad
+            ])
+
+        return blocks
     
     # def _group_into_lines(self, detections):
 

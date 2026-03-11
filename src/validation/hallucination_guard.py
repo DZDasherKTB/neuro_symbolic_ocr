@@ -23,39 +23,26 @@ class HallucinationGuard:
 
     def resolve(
         self,
-        proposed_text: str,
-        visual_evidence: List[Dict[str, Any]],
-        lattice: List[Dict[str, Any]],
+        corrected_lines,
+        recognized_lines,
+        line_crops,
         vlm_validator
-    ) -> str:
-        """
-        Resolves disagreements between OCR and LLM using VLM confirmation.
-        """
+    ):
 
-        proposed_words = proposed_text.split()
-        final_words = []
+        final_lines = []
 
-        for i, (llm_word, lattice_entry) in enumerate(zip(proposed_words, lattice)):
+        for i, corrected in enumerate(corrected_lines):
 
-            candidates = lattice_entry["candidates"]
-            ocr_word = candidates[0]["text"]
-            ocr_prob = candidates[0]["prob"]
+            if i >= len(line_crops):
+                break
 
-            llm_prob = 1.0 if llm_word.lower() == ocr_word.lower() else 0.6
+            crop = line_crops[i]["image"]
 
-            crop = visual_evidence[i]["image"]
+            vlm_match = vlm_validator._verify_line(crop, corrected)
 
-            vlm_match = vlm_validator._verify_with_vlm(crop, llm_word)
-
-            fusion_score = self.calculate_fusion_score(
-                ocr_prob=ocr_prob,
-                vlm_match=vlm_match,
-                llm_weight=llm_prob
-            )
-
-            if fusion_score >= 0.5:
-                final_words.append(llm_word)
+            if vlm_match:
+                final_lines.append(corrected)
             else:
-                final_words.append(ocr_word)
+                final_lines.append(recognized_lines[i]["text"])
 
-        return " ".join(final_words)
+        return "\n".join(final_lines)

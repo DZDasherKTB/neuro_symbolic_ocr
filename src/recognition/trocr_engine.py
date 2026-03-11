@@ -80,6 +80,7 @@ class TrOCREngine:
             )[0]
 
             recognized_lines.append({
+                "block_id": item.get("block_id", 0),
                 "line_id": item["line_id"],
                 "bbox": item["bbox"],
                 "text": text.strip()

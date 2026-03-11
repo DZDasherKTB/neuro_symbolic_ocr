@@ -68,16 +68,9 @@ def run_pipeline(image_path: str):
 
     detections = detector.detect(tiles)
 
-    text_bbox = detector.detect_text_region(detections)
+    regions = detector.detect_text_regions(detections)
 
-    if text_bbox is None:
-        raise RuntimeError("No text detected")
-
-    x1, y1, x2, y2 = text_bbox
-
-    text_region = normalized[y1:y2, x1:x2]
-
-    print("Text region:", text_bbox)
+    print("Text blocks:", len(regions))
 
     del detector
     torch.cuda.empty_cache()
@@ -87,8 +80,21 @@ def run_pipeline(image_path: str):
 
     segmenter = LineSegmenter()
 
-    line_crops = segmenter.extract_line_crops(text_region)
+    line_crops = []
 
+    for block_id, (x1,y1,x2,y2) in enumerate(regions):
+
+        region = normalized[y1:y2, x1:x2]
+
+        crops = segmenter.extract_line_crops(region)
+
+        for c in crops:
+
+            c["line_id"] = len(line_crops)
+            c["block_id"] = block_id
+
+            line_crops.append(c)
+            
     print("Lines detected:", len(line_crops))
 
     # --------------------------------------------------
@@ -119,24 +125,24 @@ def run_pipeline(image_path: str):
     torch.cuda.empty_cache()
 
     # --------------------------------------------------
-    print("\n--- Stage 8: VLM Validation ---")
+    # print("\n--- Stage 8: VLM Validation ---")
 
-    vlm = VLMValidator()
+    # vlm = VLMValidator()
 
-    final_text = vlm.validate(
-        reconstructed_text,
-        line_crops,
-        recognized_lines
-    )
+    # final_text = vlm.validate(
+    #     reconstructed_text,
+    #     line_crops,
+    #     recognized_lines
+    # )
 
-    del vlm
-    torch.cuda.empty_cache()
+    # del vlm
+    # torch.cuda.empty_cache()
 
     # --------------------------------------------------
     print("\n===== FINAL TEXT =====\n")
-    print(final_text)
+    print(reconstructed_text)
 
-    return final_text
+    return reconstructed_text
 
 
 if __name__ == "__main__":
