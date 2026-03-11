@@ -1,62 +1,97 @@
 import torch
+import cv2
 from PIL import Image
 from typing import List, Dict, Any
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 from src.pipeline.config_loader import ConfigLoader
-import cv2
+
+
 class TrOCREngine:
+
     def __init__(self):
+
         config = ConfigLoader()
         self.cfg = config.models.recognition
         self.device = config.pipeline.device
-        
-        print(f"Initializing TrOCR Recognition: {self.cfg.model_path}")
+
+        print(f"Loading TrOCR model: {self.cfg.model_path}")
+
         self.processor = TrOCRProcessor.from_pretrained(self.cfg.model_path)
-        self.model = VisionEncoderDecoderModel.from_pretrained(self.cfg.model_path).to(self.device)
-        self.model.eval()        
-        self.beam_size = self.cfg.beam_size
-        self.top_k = self.cfg.lattice.top_k
+        self.model = VisionEncoderDecoderModel.from_pretrained(
+            self.cfg.model_path
+        ).to(self.device)
 
-    def recognize_to_lattice(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        self.model.eval()
+
+        self.max_length = self.cfg.max_length
+        self.beam_size = getattr(self.cfg, "beam_size", 4)
+
+    # -------------------------------------------------------
+
+    def recognize_lines(self, line_crops: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Processes word crops and generates top-k token candidates with log-probabilities.
+        Runs OCR on line-level crops.
+
+        Input:
+            line_crops = [
+                {
+                    paragraph_id
+                    line_id
+                    image
+                    bbox
+                }
+            ]
+
+        Output:
+            recognized_lines = [
+                {
+                    paragraph_id
+                    line_id
+                    text
+                    bbox
+                }
+            ]
         """
-        lattice_data = []
 
-        for item in word_data:
-            crop = item['image']
-            if len(crop.shape) == 2:
-                pil_img = Image.fromarray(crop).convert("RGB")
-            else:
-                pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
+        recognized_lines = []
 
-            pixel_values = self.processor(pil_img, return_tensors="pt").pixel_values.to(self.device)
+        for item in line_crops:
+
+            line_img = item["image"]
+
+            pil_img = self._to_pil(line_img)
+
+            pixel_values = self.processor(
+                pil_img,
+                return_tensors="pt"
+            ).pixel_values.to(self.device)
 
             with torch.no_grad():
-                outputs = self.model.generate(
+
+                generated_ids = self.model.generate(
                     pixel_values,
                     num_beams=self.beam_size,
-                    num_return_sequences=self.top_k,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    max_length=self.cfg.max_length
+                    max_length=self.max_length
                 )
 
-            candidates = []
-            scores = torch.exp(outputs.sequences_scores) if hasattr(outputs, 'sequences_scores') else [1.0] * self.top_k
+            text = self.processor.batch_decode(
+                generated_ids,
+                skip_special_tokens=True
+            )[0]
 
-            for i, sequence in enumerate(outputs.sequences):
-                text = self.processor.batch_decode(sequence.unsqueeze(0), skip_special_tokens=True)[0]
-                candidates.append({
-                    "text": text,
-                    "prob": float(scores[i])
-                })
-
-            lattice_data.append({
-                "candidates": candidates,
-                "bbox": item['bbox'],
-                "confidence_ocr": item['confidence'],
-                "parent_tile_id": item['parent_tile_id']
+            recognized_lines.append({
+                "line_id": item["line_id"],
+                "bbox": item["bbox"],
+                "text": text.strip()
             })
 
-        return lattice_data
+        return recognized_lines
+
+    def _to_pil(self, img):
+
+        if len(img.shape) == 2:
+            return Image.fromarray(img).convert("RGB")
+
+        return Image.fromarray(
+            cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        )

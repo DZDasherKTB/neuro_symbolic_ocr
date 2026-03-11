@@ -1,70 +1,81 @@
 import torch
-import cv2
+from typing import List, Dict
 from PIL import Image
-from typing import List, Dict, Any
-from transformers import AutoProcessor, AutoModelForVision2Seq
+import cv2
 from src.pipeline.config_loader import ConfigLoader
-import numpy as np
+
+
 class VLMValidator:
-    def __init__(self):
+
+    def __init__(self, vlm_model=None):
+
         config = ConfigLoader()
         self.cfg = config.models.validation
         self.device = config.pipeline.device
-        
-        print(f"Loading Hallucination Guard: {self.cfg.model_name}")
-        self.processor = AutoProcessor.from_pretrained(self.cfg.model_name)
 
-        self.model = AutoModelForVision2Seq.from_pretrained(
-            self.cfg.model_name,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map="auto"
-        )
-        self.threshold = self.cfg.cross_modal_threshold 
+        self.vlm = vlm_model
 
-    def validate(self, proposed_text: str, visual_evidence: List[Dict], lattice: List[Dict]) -> str:
+    # ---------------------------------------------------------
+
+    def validate(
+        self,
+        corrected_text: str,
+        line_crops: List[Dict],
+        recognized_lines: List[Dict]
+    ) -> str:
         """
-        Final check: Ensures LLM corrections are visually grounded.
+        Checks if LLM output is consistent with visual evidence.
+        If hallucinations are detected, revert to raw OCR line.
         """
-        proposed_words = proposed_text.split()
-        final_output = []
 
-        for i, (word_obj, lattice_entry) in enumerate(zip(proposed_words, lattice)):
-            ocr_top_1 = lattice_entry['candidates'][0]['text']
-            
-            if word_obj.lower() != ocr_top_1.lower():
-                crop = visual_evidence[i]['image']
-                is_valid = self._verify_with_vlm(crop, word_obj)
-                
-                if is_valid:
-                    final_output.append(word_obj) 
-                else:
-                    final_output.append(ocr_top_1)
+        if self.vlm is None:
+            return corrected_text
+
+        corrected_lines = corrected_text.split("\n")
+
+        validated_lines = []
+
+        for i, line in enumerate(corrected_lines):
+
+            if i >= len(line_crops):
+                break
+
+            crop = line_crops[i]["image"]
+
+            if self._verify_line(crop, line):
+
+                validated_lines.append(line)
+
             else:
-                final_output.append(word_obj)
+                validated_lines.append(recognized_lines[i]["text"])
 
-        return " ".join(final_output)
+        return "\n".join(validated_lines)
 
-    def _verify_with_vlm(self, crop: np.ndarray, word: str) -> bool:
-        """
-        Asks VLM: 'Does this image snippet actually contain the word X?'
-        """
-        pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
-        
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": pil_img},
-                    {"type": "text", "text": f"Question: Does the word '{word}' appear in this image? Answer ONLY 'Yes' or 'No'."},
-                ],
-            }
-        ]
+    def _verify_line(self, image, text):
 
-        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[pil_img], padding=True, return_tensors="pt").to(self.device)
-        
-        with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=10)
-            
-        response = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        pil_img = self._to_pil(image)
+
+        prompt = f"""
+Does the following text match the handwritten content in the image?
+
+Text:
+{text}
+
+Answer only YES or NO.
+"""
+
+        response = self.vlm.generate_response(pil_img, prompt)
+
+        if response is None:
+            return True
+
         return "yes" in response.lower()
+
+    def _to_pil(self, img):
+
+        if len(img.shape) == 2:
+            return Image.fromarray(img).convert("RGB")
+
+        return Image.fromarray(
+            cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        )

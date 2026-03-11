@@ -1,33 +1,49 @@
+import numpy as np
+from typing import Dict, Any, List
+
+
 class LineCropper:
 
     @staticmethod
-    def crop_lines(image, detections):
+    def crop_lines(image: np.ndarray, layout: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Crops lines from the structured detector output.
 
-        lines = {}
-
-        for det in detections:
-
-            line_id = det["line_id"]
-
-            if line_id not in lines:
-                lines[line_id] = []
-
-            lines[line_id].append(det["bbox"])
+        layout format:
+        {
+            "paragraphs": [
+                [line1, line2],
+                [line3]
+            ]
+        }
+        """
 
         line_crops = []
 
-        for line_id, boxes in lines.items():
+        paragraphs = layout.get("paragraphs", [])
 
-            x1 = min(b[0] for b in boxes)
-            y1 = min(b[1] for b in boxes)
-            x2 = max(b[2] for b in boxes)
-            y2 = max(b[3] for b in boxes)
+        for para_id, paragraph in enumerate(paragraphs):
 
-            crop = image[y1:y2, x1:x2]
+            for line_id, line in enumerate(paragraph):
 
-            line_crops.append({
-                "line_id": line_id,
-                "image": crop
-            })
+                boxes = [b["bbox"] for b in line["boxes"]]
+
+                x1 = min(b[0] for b in boxes)
+                y1 = min(b[1] for b in boxes)
+                x2 = max(b[2] for b in boxes)
+                y2 = max(b[3] for b in boxes)
+
+                crop = image[y1:y2, x1:x2]
+
+                if crop.size == 0:
+                    continue
+
+                line_crops.append({
+                    "paragraph_id": para_id,
+                    "line_id": line_id,
+                    "bbox": [x1, y1, x2, y2],
+                    "image": crop,
+                    "num_words": len(boxes)
+                })
 
         return line_crops

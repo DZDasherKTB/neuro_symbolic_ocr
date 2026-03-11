@@ -16,17 +16,18 @@ class DBNetDetector:
 
         print("Loading YOLOv8 Text Detector...")
 
+        model_path = hf_hub_download(
+            local_dir=".",
+            repo_id="armvectores/yolov8n_handwritten_text_detection",
+            filename="best.pt"
+        )
 
-        model_path = hf_hub_download(local_dir=".",
-                             repo_id="armvectores/yolov8n_handwritten_text_detection",
-                             filename="best.pt")
         self.model = YOLO(model_path)
-
         self.conf_thresh = self.config.box_thresh
 
-    def detect(self, tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def detect(self, tiles: List[Dict[str, Any]]) -> Dict[str, Any]:
 
-        global_detections = []
+        detections = []
 
         for tile in tiles:
 
@@ -40,7 +41,7 @@ class DBNetDetector:
             results = self.model.predict(
                 tile_img,
                 conf=self.conf_thresh,
-                imgsz=1280,
+                imgsz=960,
                 iou=0.5,
                 device=self.device,
                 verbose=False
@@ -55,29 +56,34 @@ class DBNetDetector:
 
                     x1, y1, x2, y2 = box.astype(int)
 
-                    global_box = self._to_global(
-                        [x1, y1, x2, y2],
-                        x_offset,
-                        y_offset
-                    )
-
-                    global_detections.append({
-                        "parent_tile_id": tile_id,
-                        "bbox": global_box,
+                    detections.append({
+                        "bbox": [
+                            int(x1 + x_offset),
+                            int(y1 + y_offset),
+                            int(x2 + x_offset),
+                            int(y2 + y_offset)
+                        ],
                         "confidence": float(score),
-                        "style_tag": None
+                        "tile_id": tile_id
                     })
 
-        return self._apply_nms(global_detections)
-
-    def _to_global(self, box, x_off, y_off):
-
-        return [
-            int(box[0] + x_off),
-            int(box[1] + y_off),
-            int(box[2] + x_off),
-            int(box[3] + y_off)
+        detections = self._apply_nms(detections)
+        detections = self._merge_overlapping_boxes(detections)
+        detections = self._merge_horizontally(detections)
+        detections = [
+            d for d in detections
+            if (d["bbox"][2]-d["bbox"][0]) > 40
+            and (d["bbox"][3]-d["bbox"][1]) > 15
         ]
+        
+        return detections
+        # lines = self._group_into_lines(detections)
+
+        # paragraphs = self._group_into_paragraphs(lines)
+
+        # return {
+        #     "paragraphs": paragraphs
+        # }
 
     def _apply_nms(self, detections):
 
@@ -88,7 +94,7 @@ class DBNetDetector:
         scores = [d["confidence"] for d in detections]
 
         boxes_xywh = [
-            [b[0], b[1], b[2] - b[0], b[3] - b[1]]
+            [b[0], b[1], b[2]-b[0], b[3]-b[1]]
             for b in boxes
         ]
 
@@ -103,3 +109,203 @@ class DBNetDetector:
             return []
 
         return [detections[i] for i in indices.flatten()]
+
+    def detect_text_region(self, detections):
+
+        if not detections:
+            return None
+
+        x1 = min(d["bbox"][0] for d in detections)
+        y1 = min(d["bbox"][1] for d in detections)
+        x2 = max(d["bbox"][2] for d in detections)
+        y2 = max(d["bbox"][3] for d in detections)
+        pad = 20
+
+        x1 = max(0, x1-pad)
+        y1 = max(0, y1-pad)
+        x2 = x2+pad
+        y2 = y2+pad
+        
+        return [x1, y1, x2, y2]
+    
+    # def _group_into_lines(self, detections):
+
+    #     detections = sorted(detections, key=lambda d: d["bbox"][1])
+
+    #     lines = []
+    #     vertical_threshold = 0.6
+
+    #     for det in detections:
+
+    #         x1, y1, x2, y2 = det["bbox"]
+    #         center_y = (y1 + y2) / 2
+    #         height = y2 - y1
+
+    #         assigned = False
+
+    #         for line in lines:
+    #             line_center = np.mean([
+    #                 (b["bbox"][1] + b["bbox"][3]) / 2
+    #                 for b in line["boxes"]
+    #             ])
+
+    #             if abs(center_y - line_center) < height * vertical_threshold:
+    #                 line["boxes"].append(det)
+    #                 assigned = True
+    #                 break
+
+    #         if not assigned:
+
+    #             lines.append({
+    #                 "center_y": center_y,
+    #                 "boxes": [det]
+    #             })
+
+    #     for line in lines:
+    #         line["boxes"] = sorted(line["boxes"], key=lambda d: d["bbox"][0])
+
+    #     return lines
+
+    # def _group_into_paragraphs(self, lines):
+
+    #     if not lines:
+    #         return []
+
+    #     paragraphs = []
+    #     line_heights=[max(b["bbox"][3]-b["bbox"][1] for b in l["boxes"]) for l in lines]
+    #     avg_h=sum(line_heights)/len(line_heights)
+
+    #     vertical_gap_threshold = avg_h*2
+
+    #     current_para = [lines[0]]
+
+    #     for i in range(1, len(lines)):
+
+    #         prev_line = lines[i-1]
+    #         curr_line = lines[i]
+
+    #         prev_bottom = max(b["bbox"][3] for b in prev_line["boxes"])
+    #         curr_top = min(b["bbox"][1] for b in curr_line["boxes"])
+
+    #         if curr_top - prev_bottom < vertical_gap_threshold:
+
+    #             current_para.append(curr_line)
+
+    #         else:
+
+    #             paragraphs.append(current_para)
+    #             current_para = [curr_line]
+
+    #     paragraphs.append(current_para)
+
+    #     return paragraphs
+    
+    def _merge_overlapping_boxes(self, detections, iou_thresh=0.5):
+
+        changed = True
+
+        while changed:
+
+            changed = False
+            new_detections = []
+
+            used = [False] * len(detections)
+
+            for i in range(len(detections)):
+
+                if used[i]:
+                    continue
+
+                boxA = detections[i]["bbox"]
+
+                for j in range(i+1, len(detections)):
+
+                    if used[j]:
+                        continue
+
+                    boxB = detections[j]["bbox"]
+
+                    if self._iou(boxA, boxB) > iou_thresh:
+
+                        boxA = [
+                            min(boxA[0], boxB[0]),
+                            min(boxA[1], boxB[1]),
+                            max(boxA[2], boxB[2]),
+                            max(boxA[3], boxB[3]),
+                        ]
+
+                        used[j] = True
+                        changed = True
+
+                new_detections.append({
+                    "bbox": boxA,
+                    "confidence": detections[i]["confidence"],
+                    "tile_id": detections[i]["tile_id"]
+                })
+
+                used[i] = True
+
+            detections = new_detections
+
+        return detections
+    
+    def _iou(self, a, b):
+
+        xA = max(a[0], b[0])
+        yA = max(a[1], b[1])
+        xB = min(a[2], b[2])
+        yB = min(a[3], b[3])
+
+        inter = max(0, xB-xA) * max(0, yB-yA)
+
+        areaA = (a[2]-a[0])*(a[3]-a[1])
+        areaB = (b[2]-b[0])*(b[3]-b[1])
+
+        return inter / (areaA + areaB - inter + 1e-6)
+    
+    def _merge_horizontally(self, detections, gap_ratio=1.5):
+
+        detections = sorted(detections, key=lambda d: d["bbox"][0])
+
+        merged = []
+        used = [False]*len(detections)
+
+        for i in range(len(detections)):
+
+            if used[i]:
+                continue
+
+            x1,y1,x2,y2 = detections[i]["bbox"]
+            h = y2-y1
+
+            for j in range(i+1,len(detections)):
+
+                if used[j]:
+                    continue
+
+                bx1,by1,bx2,by2 = detections[j]["bbox"]
+
+                center_diff = abs(((y1+y2)/2)-((by1+by2)/2))
+
+                # same line
+                if center_diff < h*0.5:
+
+                    gap = bx1-x2
+
+                    if gap < h*gap_ratio:
+
+                        x2 = max(x2,bx2)
+                        y1 = min(y1,by1)
+                        y2 = max(y2,by2)
+
+                        used[j]=True
+
+            merged.append({
+                "bbox":[x1,y1,x2,y2],
+                "confidence":detections[i]["confidence"],
+                "tile_id":detections[i]["tile_id"]
+            })
+
+            used[i]=True
+
+        return merged
